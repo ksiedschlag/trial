@@ -24,29 +24,6 @@ questions = [
     "5. How comfortable are you making financial decisions when the outcome is uncertain?"
 ]
 
-# Display all questions
-st.title('Risk Tolerance Assessment')
-for i, question in enumerate(questions):
-    display_question(question, i)
-
-# Calculate total score based on user responses
-# Scoring: Higher score means higher risk tolerance.
-# 'Very uncomfortable' (low risk tolerance) -> 0 points
-# 'uncomfortable' -> 1 point
-# 'Neutral' -> 2 points
-# 'comfortable' -> 3 points
-# 'very comfortable' (high risk tolerance) -> 4 points
-score_for_option = {
-    'Very uncomfortable': 0,
-    'uncomfortable': 1,
-    'Neutral': 2,
-    'comfortable': 3,
-    'very comfortable': 4
-}
-total_score = 0
-for response_label in st.session_state.responses:
-    total_score += score_for_option.get(response_label, 0) # Add score, default 0 if not selected yet
-
 # Define risk profiles and their investment criteria
 risk_profiles = {
     'Low': {
@@ -105,9 +82,19 @@ risk_profiles = {
     }
 }
 
+# Calculate total score based on user responses
+score_for_option = {
+    'Very uncomfortable': 0,
+    'uncomfortable': 1,
+    'Neutral': 2,
+    'comfortable': 3,
+    'very comfortable': 4
+}
+total_score = 0
+for response_label in st.session_state.responses:
+    total_score += score_for_option.get(response_label, 0) # Add score, default 0 if not selected yet
+
 # Determine risk profile based on total score (0-20 scale)
-# Lower score -> Lower risk tolerance -> 'Low' profile
-# Higher score -> Higher risk tolerance -> 'High' profile
 if total_score <= 6: # Scores 0-6
     profile = 'Low'
 elif total_score <= 13: # Scores 7-13
@@ -115,96 +102,139 @@ elif total_score <= 13: # Scores 7-13
 else: # Scores 14-20
     profile = 'High'
 
-# Display results
-st.header(f"Your Risk Profile: {profile}")
-st.write(f"**Goal:** {risk_profiles[profile]['goal']}")
-st.write(f"**Recommended Asset Allocation:** {risk_profiles[profile]['allocation']}")
-st.write(f"**Rationale:** {risk_profiles[profile]['rationale']}")
-st.write(f"**Summary:** {risk_profiles[profile]['summary']}")
+# Create tabs
+st.title('📊 Risk Tolerance Assessment')
+tab1, tab2, tab3 = st.tabs(["📋 Assessment", "📈 Results", "🔍 Stock Analyzer"])
 
-# Display recommended investments for the user's risk profile
-st.subheader(f"📈 Recommended Investments for {profile} Risk Profile")
-st.write(f"Based on your risk tolerance, here are investments suitable for your profile:")
+# TAB 1: Assessment
+with tab1:
+    st.header("Answer the Following Questions")
+    st.write("Please rate your comfort level with each scenario:")
+    st.write("")
+    
+    for i, question in enumerate(questions):
+        display_question(question, i)
+    
+    st.info(f"Current Score: **{total_score}/20**")
 
-recommendations_df = pd.DataFrame(risk_profiles[profile]['recommended_investments'])
-st.table(recommendations_df)
+# TAB 2: Results
+with tab2:
+    st.header(f"Your Risk Profile: {profile}")
+    
+    # Create columns for profile summary
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("📊 Risk Score", f"{total_score}/20", "Assessment Complete")
+    with col2:
+        st.metric("🎯 Profile", profile, "Determined")
+    with col3:
+        st.metric("💼 Allocation", risk_profiles[profile]['allocation'].split()[0], "Stocks")
+    
+    st.markdown("---")
+    
+    # Display profile details
+    st.write(f"**Goal:** {risk_profiles[profile]['goal']}")
+    st.write(f"**Recommended Asset Allocation:** {risk_profiles[profile]['allocation']}")
+    st.write(f"**Rationale:** {risk_profiles[profile]['rationale']}")
+    st.write(f"**Summary:** {risk_profiles[profile]['summary']}")
+    
+    st.markdown("---")
+    
+    # Display recommended investments for the user's risk profile
+    st.subheader(f"📈 Recommended Investments for {profile} Risk Profile")
+    st.write(f"Based on your risk tolerance, here are investments suitable for your profile:")
+    
+    recommendations_df = pd.DataFrame(risk_profiles[profile]['recommended_investments'])
+    st.table(recommendations_df)
 
-# --- New Section: Stock Investment Recommendation ---
-st.subheader('Stock Investment Recommendation')
-stock_ticker = st.text_input("Enter a stock ticker symbol (e.g., AAPL, MSFT, GOOGL):", key="stock_ticker_input").upper()
+# TAB 3: Stock Investment Recommendation
+with tab3:
+    st.header('🔍 Stock Investment Recommendation')
+    st.write("Analyze any stock to see if it aligns with your risk profile:")
+    st.write("")
+    
+    stock_ticker = st.text_input("Enter a stock ticker symbol (e.g., AAPL, MSFT, GOOGL):", key="stock_ticker_input").upper()
+    
+    if stock_ticker:
+        with st.spinner(f'Fetching data for {stock_ticker}...'):
+            try:
+                # Fetch data for the last year
+                stock_data = yf.download(stock_ticker, period="1y", progress=False)
 
-if stock_ticker:
-    with st.spinner(f'Fetching data for {stock_ticker}...'):
-        try:
-            # Fetch data for the last year
-            stock_data = yf.download(stock_ticker, period="1y", progress=False)
+                if not stock_data.empty:
+                    st.write(f"\n### Analyzing **{stock_ticker}** (last 1 year)")
 
-            if not stock_data.empty:
-                st.write(f"\nAnalyzing **{stock_ticker}** (last 1 year):")
+                    # Get close prices
+                    close_prices = stock_data['Close']
 
-                # Get close prices
-                close_prices = stock_data['Close']
+                    # Convert DataFrame column to Series if needed
+                    if isinstance(close_prices, pd.DataFrame):
+                        close_prices = close_prices.squeeze()
 
-                # Convert DataFrame column to Series if needed
-                if isinstance(close_prices, pd.DataFrame):
-                    close_prices = close_prices.squeeze()
+                    # Calculate daily returns
+                    stock_data['Daily Return'] = close_prices.pct_change()
 
-                # Calculate daily returns
-                stock_data['Daily Return'] = close_prices.pct_change()
+                    # Calculate volatility and average return
+                    volatility = float(stock_data['Daily Return'].std())
+                    avg_daily_return = float(stock_data['Daily Return'].mean())
 
-                # Calculate volatility and average return
-                volatility = float(stock_data['Daily Return'].std())
-                avg_daily_return = float(stock_data['Daily Return'].mean())
+                    # Calculate total price change
+                    initial_price = float(close_prices.iloc[0])
+                    final_price = float(close_prices.iloc[-1])
+                    price_change_percent = ((final_price - initial_price) / initial_price) * 100
 
-                # Calculate total price change
-                initial_price = float(close_prices.iloc[0])
-                final_price = float(close_prices.iloc[-1])
-                price_change_percent = ((final_price - initial_price) / initial_price) * 100
+                    # Display metrics
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Daily Volatility", f"{volatility:.4f}", "Std Dev")
+                    with col2:
+                        st.metric("Avg Daily Return", f"{avg_daily_return:.4f}", "Return Rate")
+                    with col3:
+                        st.metric("1-Year Change", f"{price_change_percent:.2f}%", "Price Growth")
 
-                st.write(f"- Daily Volatility (Std Dev of Daily Returns): **{volatility:.4f}**")
-                st.write(f"- Average Daily Return: **{avg_daily_return:.4f}**")
-                st.write(f"- Total Price Change: **{price_change_percent:.2f}%**")
+                    st.markdown("---")
 
-                # Get criteria for the determined risk profile
-                profile_criteria = risk_profiles[profile]['stock_criteria']
+                    # Get criteria for the determined risk profile
+                    profile_criteria = risk_profiles[profile]['stock_criteria']
 
-                invest_decision_factors = []
+                    invest_decision_factors = []
 
-                # Check volatility
-                if volatility <= profile_criteria['volatility_threshold']:
-                    invest_decision_factors.append(True)
-                    st.write(f"  ✅ Volatility ({volatility:.4f}) is within your **{profile}** risk tolerance (max {profile_criteria['volatility_threshold']:.4f}).")
+                    # Check volatility
+                    if volatility <= profile_criteria['volatility_threshold']:
+                        invest_decision_factors.append(True)
+                        st.write(f"  ✅ Volatility ({volatility:.4f}) is within your **{profile}** risk tolerance (max {profile_criteria['volatility_threshold']:.4f}).")
+                    else:
+                        invest_decision_factors.append(False)
+                        st.write(f"  ❌ Volatility ({volatility:.4f}) is higher than your **{profile}** risk tolerance (max {profile_criteria['volatility_threshold']:.4f}).")
+
+                    # Check average daily return
+                    if avg_daily_return >= profile_criteria['avg_return_threshold']:
+                        invest_decision_factors.append(True)
+                        st.write(f"  ✅ Average daily return ({avg_daily_return:.4f}) meets your **{profile}** profile's minimum ({profile_criteria['avg_return_threshold']:.4f}).")
+                    else:
+                        invest_decision_factors.append(False)
+                        st.write(f"  ❌ Average daily return ({avg_daily_return:.4f}) is below your **{profile}** profile's minimum ({profile_criteria['avg_return_threshold']:.4f}).")
+
+                    # Check total price change
+                    if price_change_percent >= profile_criteria['min_price_change_percent']:
+                        invest_decision_factors.append(True)
+                        st.write(f"  ✅ Total price change ({price_change_percent:.2f}%) meets your **{profile}** profile's minimum growth expectation ({profile_criteria['min_price_change_percent']:.2f}%).")
+                    else:
+                        invest_decision_factors.append(False)
+                        st.write(f"  ❌ Total price change ({price_change_percent:.2f}%) is below your **{profile}** profile's minimum growth expectation ({profile_criteria['min_price_change_percent']:.2f}%).")
+
+                    st.write("")
+                    st.markdown("---")
+
+                    # Final decision
+                    if all(invest_decision_factors):
+                        st.success(f"**Recommendation for {stock_ticker}: Consider Investing!** This stock aligns well with your **{profile}** risk profile and investment criteria.")
+                    else:
+                        st.error(f"**Recommendation for {stock_ticker}: Do Not Invest at this time.** This stock does not fully align with your **{profile}** risk profile and investment criteria based on the analysis above.")
+
                 else:
-                    invest_decision_factors.append(False)
-                    st.write(f"  ❌ Volatility ({volatility:.4f}) is higher than your **{profile}** risk tolerance (max {profile_criteria['volatility_threshold']:.4f}).")
+                    st.warning(f"Could not retrieve data for ticker: **{stock_ticker}**. Please check the symbol and try again.")
 
-                # Check average daily return
-                if avg_daily_return >= profile_criteria['avg_return_threshold']:
-                    invest_decision_factors.append(True)
-                    st.write(f"  ✅ Average daily return ({avg_daily_return:.4f}) meets your **{profile}** profile's minimum ({profile_criteria['avg_return_threshold']:.4f}).")
-                else:
-                    invest_decision_factors.append(False)
-                    st.write(f"  ❌ Average daily return ({avg_daily_return:.4f}) is below your **{profile}** profile's minimum ({profile_criteria['avg_return_threshold']:.4f}).")
-
-                # Check total price change
-                if price_change_percent >= profile_criteria['min_price_change_percent']:
-                    invest_decision_factors.append(True)
-                    st.write(f"  ✅ Total price change ({price_change_percent:.2f}%) meets your **{profile}** profile's minimum growth expectation ({profile_criteria['min_price_change_percent']:.2f}%).")
-                else:
-                    invest_decision_factors.append(False)
-                    st.write(f"  ❌ Total price change ({price_change_percent:.2f}%) is below your **{profile}** profile's minimum growth expectation ({profile_criteria['min_price_change_percent']:.2f}%).")
-
-                st.write("\n---")
-
-                # Final decision
-                if all(invest_decision_factors):
-                    st.success(f"**Recommendation for {stock_ticker}: Consider Investing!** This stock aligns well with your **{profile}** risk profile and investment criteria.")
-                else:
-                    st.error(f"**Recommendation for {stock_ticker}: Do Not Invest at this time.** This stock does not fully align with your **{profile}** risk profile and investment criteria based on the criteria above.")
-
-            else:
-                st.warning(f"Could not retrieve data for ticker: **{stock_ticker}**. Please check the symbol and try again.")
-
-        except Exception as e:
-            st.error(f"An error occurred while fetching data for {stock_ticker}: {e}")
-            st.info("Please ensure the ticker symbol is valid and try again. Sometimes, data for very obscure tickers may not be available via `yfinance`.")
+            except Exception as e:
+                st.error(f"An error occurred while fetching data for {stock_ticker}: {e}")
+                st.info("Please ensure the ticker symbol is valid and try again. Sometimes, data for very obscure tickers may not be available via `yfinance`.")
